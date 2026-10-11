@@ -5,12 +5,14 @@
   "license": "MIT",
   "files": [
     "dist",
+    "assets",
     "builders.json"
   ],
   "builders": "./builders.json",
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/cordova-serve-esbuild/schema.json dist/cordova-serve-esbuild/schema.json",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test test/builder.test.js"
   },
   "repository": {
     "type": "git",

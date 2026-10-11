@@ -5,8 +5,9 @@ import { executeDevServerBuilder } from '@angular/build';
 import type { DevServerBuilderOptions, DevServerBuilderOutput } from '@angular/build';
 import type { json } from '@angular-devkit/core';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import type * as http from 'http';
-import { extname, resolve } from 'path';
+import { extname, resolve, sep } from 'path';
 import { from } from 'rxjs';
 import type { Observable } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
@@ -16,19 +17,33 @@ import { augmentIndexHtml } from '../utils/append-scripts';
 import { createConsoleLogServer } from '../utils/log-server';
 import type { CordovaServeBuilderSchema } from './schema';
 
+/** `assets/` next to `dist/` in the package: this file is `dist/cordova-serve-esbuild/index.js`. */
+const PACKAGE_ASSETS = resolve(__dirname, '..', '..', 'assets');
+
 export type CordovaDevServerBuilderOptions = CordovaServeBuilderSchema & json.JsonObject;
 
 const MIME_TYPES: Record<string, string> = {
   '.js': 'application/javascript',
-  '.map': 'text/plain',
+  '.mjs': 'application/javascript',
+  '.map': 'application/json',
   '.css': 'text/css',
   '.html': 'text/html',
   '.json': 'application/json',
+  '.txt': 'text/plain',
+  '.xml': 'application/xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.wasm': 'application/wasm',
 };
 
 export function serveCordova(options: CordovaServeBuilderSchema, context: BuilderContext): Observable<DevServerBuilderOutput> {
@@ -39,17 +54,10 @@ export function serveCordova(options: CordovaServeBuilderSchema, context: Builde
   async function setup() {
     const devServerTargetOptions = await context.getTargetOptions(devServerTargetSpec);
     const devServerName = await context.getBuilderNameForTarget(devServerTargetSpec);
-    console.log(devServerTargetOptions, devServerName);
-
-    // console.log(devServerTargetOptions);
 
     devServerTargetOptions.port = port;
     devServerTargetOptions.host = host;
     devServerTargetOptions.ssl = ssl;
-
-
-    // delete devServerTargetOptions.serviceWorker;
-
 
     const formattedOptions = await context.validateOptions<DevServerBuilderOptions & json.JsonObject>(devServerTargetOptions, devServerName);
     const serverAssets = prepareEsbuildServerConfig(options, root);
@@ -97,10 +105,10 @@ function buildMiddleware(
 
   // Serve static asset directories (e.g. cordova platform_www)
   for (const dir of serverAssets.staticDirs) {
+    const base = resolve(dir);
     handlers.push((req, res, next) => {
-      const urlPath = (req.url ?? '/').split('?')[0];
-      const filePath = resolve(dir, urlPath.replace(/^\//, ''));
-      if (existsSync(filePath) && statSync(filePath).isFile()) {
+      const filePath = resolveInside(base, (req.url ?? '/').split('?')[0]);
+      if (filePath && existsSync(filePath) && statSync(filePath).isFile()) {
         const contentType = MIME_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(readFileSync(filePath));
@@ -111,6 +119,24 @@ function buildMiddleware(
   }
 
   return handlers;
+}
+
+/**
+ * The file a request path names inside `base`, or null when it is malformed or climbs out of `base`
+ * (`/../x`, `/%2e%2e/x`). The path is decoded first: a file name with a space or a non-ASCII letter arrives encoded.
+ */
+export function resolveInside(base: string, urlPath: string): string | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(urlPath);
+  } catch {
+    return null;
+  }
+  if (decoded.includes('\0')) {
+    return null;
+  }
+  const target = resolve(base, decoded.replace(/^\/+/, ''));
+  return target === base || target.startsWith(base + sep) ? target : null;
 }
 
 export const indexHtmlTransformFactory: (serverAssets: EsbuildServerAssets) => (content: string) => Promise<string> =
@@ -130,21 +156,22 @@ export function prepareEsbuildServerConfig(options: CordovaServeBuilderSchema, r
   const cordovaBasePath = normalize(options.cordovaBasePath ? options.cordovaBasePath : '.');
 
   if (options.consolelogs) {
-    const configPath = getSystemPath(join(normalize(__dirname), '../assets', normalize('consolelog-config.js')));
+    // Written to the temp directory: the package's own directory may be read-only (node_modules).
+    const configPath = resolve(tmpdir(), 'cordova-serve-esbuild-consolelog-config.js');
     writeFileSync(
       configPath,
       `window.Ionic = window.Ionic || {}; Ionic.ConsoleLogServerConfig = { wsPort: ${options.consolelogsPort} }`
     );
     rawScripts.push({ input: configPath, bundleName: 'consolelogs' });
     rawScripts.push({
-      input: getSystemPath(join(normalize(__dirname), '../assets', normalize('consolelogs.js'))),
+      input: getSystemPath(join(normalize(PACKAGE_ASSETS), normalize('consolelogs.js'))),
       bundleName: 'consolelogs',
     });
   }
 
   if (options.cordovaMock) {
     rawScripts.push({
-      input: getSystemPath(join(normalize(__dirname), '../assets', normalize('cordova.js'))),
+      input: getSystemPath(join(normalize(PACKAGE_ASSETS), normalize('cordova.js'))),
       bundleName: 'cordova',
     });
   } else if (options.cordovaAssets) {
