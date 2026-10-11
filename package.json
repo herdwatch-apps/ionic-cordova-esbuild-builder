@@ -1,0 +1,39 @@
+{
+  "name": "@herdwatch/ionic-cordova-esbuild-builder",
+  "version": "1.0.0",
+  "description": "Angular builder that serves a Cordova app with the esbuild dev server (live reload)",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "builders.json"
+  ],
+  "builders": "./builders.json",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/cordova-serve-esbuild/schema.json dist/cordova-serve-esbuild/schema.json",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/herdwatch-apps/ionic-cordova-esbuild-builder.git"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.10",
+    "colorette": "^2.0.16",
+    "ws": "^8.2.3"
+  },
+  "peerDependencies": {
+    "@angular-devkit/architect": ">=0.2100.0",
+    "@angular-devkit/core": ">=21.0.0",
+    "@angular/build": ">=21.0.0",
+    "rxjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/architect": "^0.2100.0",
+    "@angular-devkit/core": "^21.0.0",
+    "@angular/build": "^21.0.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "rxjs": "^7.8.0",
+    "typescript": "~5.9.0"
+  }
+}

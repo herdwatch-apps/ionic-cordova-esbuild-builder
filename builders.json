@@ -1,0 +1,9 @@
+{
+  "builders": {
+    "cordova-serve-esbuild": {
+      "implementation": "./dist/cordova-serve-esbuild/index",
+      "schema": "./dist/cordova-serve-esbuild/schema.json",
+      "description": "Run the esbuild dev-server with Cordova assets."
+    }
+  }
+}
